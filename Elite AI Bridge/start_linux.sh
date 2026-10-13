@@ -11,6 +11,7 @@
 #         start_linux.sh --setup    rebuild the private runtime, then start
 #         start_linux.sh --check    only check Python and system packages
 #         start_linux.sh --paths    show where the Bridge looks for Elite's files
+#         start_linux.sh --input    check cockpit key sending (uinput, X11 tools, Elite window)
 #
 # Everything the Bridge writes goes to $XDG_DATA_HOME/EliteAIBridge (usually
 # ~/.local/share/EliteAIBridge). See LINUX.md in the top folder for the details and
@@ -32,6 +33,7 @@ case "${1:-}" in
     --setup) MODE="setup"; shift ;;
     --check) MODE="check"; shift ;;
     --paths) MODE="paths"; shift ;;
+    --input) MODE="input"; shift ;;
     -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 
@@ -76,7 +78,7 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
     echo "These system packages are needed before the Bridge can run:"
     for item in "${MISSING[@]}"; do echo "  - $item"; done
     echo
-    [ "$MODE" = "paths" ] || fail "Install the packages above, then run this script again."
+    [ "$MODE" = "paths" ] || [ "$MODE" = "input" ] || fail "Install the packages above, then run this script again."
 fi
 [ "$MODE" = "check" ] && { log "System check passed."; exit 0; }
 
@@ -85,6 +87,30 @@ echo "Detected locations:"
 "$SYSTEM_PY" "$APP_ROOT/common/eab_platform.py" | sed 's/^/  /'
 echo
 if [ "$MODE" = "paths" ]; then exit 0; fi
+if [ "$MODE" = "input" ]; then
+    echo "Cockpit key sending:"
+    "$SYSTEM_PY" "$APP_ROOT/common/eab_linux_input.py" | sed 's/^/  /'
+    echo
+    echo "A press test types 'elite ai bridge' into the active window 1.5 s after you run:"
+    echo "  $SYSTEM_PY \"$APP_ROOT/common/eab_linux_input.py\" --press-test"
+    exit 0
+fi
+# Cockpit actions need a virtual keyboard (/dev/uinput) and X11 tools. Warn, do not stop:
+# the dashboard, data, voice and AI work without them.
+INPUT_WARN="$("$SYSTEM_PY" - <<'PY'
+import sys; sys.path.insert(0, "common"); import eab_linux_input as m
+ok, why = m.uinput_status()
+if not ok: print(why)
+w = m.X11Windows()
+if not w.can_query: print(w.missing_tools_hint())
+PY
+)"
+if [ -n "$INPUT_WARN" ]; then
+    echo "NOTE: cockpit actions (Dock, Launch, route plotting, macros) are off until this is fixed:"
+    printf '%s\n' "$INPUT_WARN" | sed 's/^/      /'
+    echo "      See LINUX.md, 'Cockpit key sending'. Run with --input to re-check."
+    echo
+fi
 if ! "$SYSTEM_PY" -c 'import sys; sys.path.insert(0, "common"); import eab_platform; raise SystemExit(0 if eab_platform.journal_dir().is_dir() else 1)'; then
     echo "NOTE: the Elite journal folder was not found. Run Elite Dangerous once under Proton, or"
     echo "      set ELITE_JOURNAL_DIR / ELITE_PROTON_PREFIX (see LINUX.md). Starting anyway."

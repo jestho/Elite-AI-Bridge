@@ -2749,20 +2749,28 @@ def _elite_process_running():
     Elite leaves Journal/Status files behind after exit, so file presence alone cannot
     represent a live game connection. Cache tasklist briefly to keep snapshot polling cheap.
     """
-    if os.name != "nt":
+    if os.name != "nt" and not shutil.which("pgrep"):
         return None
     now = time.monotonic()
     if now - float(_ELITE_PROCESS_CACHE.get("checked", 0.0) or 0.0) < 1.25:
         return _ELITE_PROCESS_CACHE.get("running")
     running = False
     try:
-        proc = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=2.0, check=False,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        low = (proc.stdout or "").casefold()
-        running = "elitedangerous64.exe" in low or "elitedangerous.exe" in low
+        if os.name == "nt":
+            proc = subprocess.run(
+                ["tasklist", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=2.0, check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            low = (proc.stdout or "").casefold()
+            running = "elitedangerous64.exe" in low or "elitedangerous.exe" in low
+        else:
+            # Under Proton the game is a Wine process whose command line names the EXE.
+            proc = subprocess.run(
+                ["pgrep", "-f", "-i", "elitedangerous(64)?\\.exe"],
+                capture_output=True, text=True, timeout=2.0, check=False,
+            )
+            running = proc.returncode == 0 and bool((proc.stdout or "").strip())
     except Exception:
         running = None
     _ELITE_PROCESS_CACHE["checked"] = now

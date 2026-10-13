@@ -12,7 +12,12 @@
   refused outside Windows before.
 - The verified OpenAI key is kept between runs on Linux in an owner-only file in the Bridge
   data folder (Windows keeps using the user environment variable).
-- Cockpit key sending, global hotkeys and the Windows voice fallback remain Windows-only.
+- Cockpit actions on Linux press keys through a uinput virtual keyboard
+  (`common/eab_linux_input.py`, no extra Python packages) and check the active window with
+  xdotool or xprop/wmctrl, failing closed when they cannot. `RUN_CURRENT_SOURCE.sh --input`
+  reports the setup. Station automation gates on the key sender's availability instead of
+  the OS, and the game process is detected with pgrep.
+- Global hotkeys, keyboard push to talk and the Windows voice fallback remain Windows-only.
 
 ### Changed
 - `Elite AI Bridge/common/eab_platform.py` is the one place that resolves Elite's folders

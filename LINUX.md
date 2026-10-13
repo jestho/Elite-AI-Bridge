@@ -2,9 +2,10 @@
 
 Elite AI Bridge is a Windows application. This page describes the experimental native
 Linux run of the same source, for pilots who play Elite Dangerous through Steam Proton.
-It is a work in progress: the dashboard, data, voice and AI parts run; anything that
-presses keys in the cockpit does not yet. See "What does not work yet" below before you
-spend time on it.
+It is a work in progress. The dashboard, data, voice and AI parts run. Cockpit actions
+(the keys the Bridge presses in the game) work through a virtual keyboard once you have
+set up `/dev/uinput` and the X11 tools described under "Cockpit key sending". See "What
+does not work yet" before you spend time on it.
 
 ## What works
 - The full interface: Flight Deck, Combat, Trade, Navigation, Colonization, Commander,
@@ -15,13 +16,10 @@ spend time on it.
 - The ship voice (Supertonic, local) and sound effects, through PortAudio.
 - The optional OpenAI co-pilot, including push to talk on a HOTAS or controller button.
 - The OpenAI key typed into the setup wizard is kept between runs.
+- Cockpit actions: Dock, Launch, Clear and Jump, route plotting, station services, combat
+  macros, Dynamic PIPs, auto chaff and the trade loop, after the one-time setup below.
 
 ## What does not work yet
-- **Cockpit actions.** Dock, Launch, Clear and Jump, route plotting, station services,
-  combat macros, Dynamic PIPs, auto chaff and the trade loop all send keystrokes to the
-  game through the Windows `SendInput` API. On Linux they report that no active Elite
-  bindings profile is available, or that key sending is Windows-only. A Linux key sender
-  (uinput or xdotool) is the next piece of work.
 - **Global hotkeys and keyboard push to talk.** These use Windows `RegisterHotKey`. Map
   push to talk to a HOTAS or controller button instead.
 - **The Windows system voice fallback.** Only Supertonic is available. If its model
@@ -59,6 +57,45 @@ Other launcher options:
     ./RUN_CURRENT_SOURCE.sh --check    check Python and system packages only
     ./RUN_CURRENT_SOURCE.sh --paths    show where the Bridge will look for Elite's files
     ./RUN_CURRENT_SOURCE.sh --setup    rebuild the private runtime from scratch
+
+## Cockpit key sending
+On Windows the Bridge presses cockpit keys with the `SendInput` API. On Linux it creates
+a virtual USB keyboard through the kernel's uinput interface, so the game, Wine and the
+display server see real key presses. This works on X11 and on Wayland desktops, because
+Proton draws the game through X11 (XWayland) either way. Two one-time steps:
+
+1. **Allow your user to create virtual input devices.** Save this udev rule, add yourself
+   to the `input` group, make sure the module loads at boot, then log out and in:
+
+       sudo tee /etc/udev/rules.d/80-elite-ai-bridge-uinput.rules >/dev/null <<'EOF'
+       KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+       EOF
+       echo uinput | sudo tee /etc/modules-load.d/uinput.conf >/dev/null
+       sudo modprobe uinput
+       sudo udevadm control --reload-rules && sudo udevadm trigger
+       sudo usermod -aG input "$USER"
+
+   Anyone in the `input` group can create virtual keyboards, which is the same access
+   `ydotool` and similar tools need.
+
+2. **Install `xdotool`** (or `xprop` and `wmctrl`). The Bridge only sends keys while the
+   game is the active window, exactly as on Windows, and uses these tools to check that
+   and to bring Elite to the front for route plotting. Without them every cockpit action
+   is refused.
+
+Check the result with:
+
+    ./RUN_CURRENT_SOURCE.sh --input
+
+It reports whether `/dev/uinput` is writable, which tools were found, the active window
+and whether the Elite window is visible. The launcher prints the same warning at startup
+while anything is missing; the rest of the Bridge keeps working in the meantime.
+
+The Bridge's keyboard appears in the game as "Elite AI Bridge virtual keyboard". Elite
+reads it like any other keyboard, so the keys come from your own `.binds` profile and
+nothing needs to be rebound. On a Wayland desktop the active-window check only sees X11
+windows (the game and the Bridge itself, which the launcher starts under XWayland), which
+is enough for the safety check.
 
 ## Where things are
 Elite under Proton keeps its files inside the game's Wine prefix (Steam app id 359320).
@@ -99,5 +136,10 @@ Delete that file to forget the key.
 - **No sound or no voice:** `libportaudio2` (or your distribution's PortAudio) must be
   installed before the runtime is built. Install it, then run with `--setup`.
 - **Qt fails to start with an xcb error:** install `libxcb-cursor0` / `xcb-util-cursor`.
+- **Dock, Launch or a route plot says "unavailable", "not the foreground window" or
+  "Windows-only":** run `./RUN_CURRENT_SOURCE.sh --input`. Usually `/dev/uinput` is not
+  writable yet (log out and in after adding the group) or `xdotool` is missing.
+- **Keys reach the desktop but not the game:** click into the game window once so it has
+  keyboard focus, and check that Elite's own Options > Controls show your keyboard preset.
 - **Logs:** `~/.local/share/EliteAIBridge/qml_backend.log` and
   `~/.local/share/EliteAIBridge/logs/runtime_setup.log`.

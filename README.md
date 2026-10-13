@@ -57,8 +57,8 @@ To run from source on Windows, run `RUN_CURRENT_SOURCE.bat`. On the first run it
 the same private runtime the installer uses (internet needed), then starts the Bridge.
 
 On Linux, with Elite Dangerous running under Steam Proton, run `RUN_CURRENT_SOURCE.sh`.
-This is experimental: the dashboard, data, voice and AI features work, cockpit key sending
-does not yet. See [LINUX.md](LINUX.md) for requirements and limits.
+This is experimental: the dashboard, data, voice and AI features work, and cockpit actions
+use a virtual keyboard after a one-time `/dev/uinput` setup. See [LINUX.md](LINUX.md).
 
 ## Reporting a bug
 In the Bridge, go to Setup > Status. Press MAKE SUPPORT FILE, then REPORT ON GITHUB or

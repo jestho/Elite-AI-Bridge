@@ -3780,6 +3780,72 @@ class WinKeySender:
     def send_binding_hold(self, binding, hold_seconds=0.2):
         self.send_tokens_hold(binding.get("modifiers", []), binding["key"], hold_seconds)
 
+    def availability(self):
+        """(usable, reason) for cockpit key sending on this machine."""
+        if os.name != "nt":
+            return False, "Windows SendInput is not available on this OS."
+        return True, ""
+
+
+class LinuxKeySender(WinKeySender):
+    """Linux counterpart of WinKeySender: a uinput virtual keyboard instead of SendInput.
+
+    The press/hold/tap sequencing is inherited unchanged; only the three platform
+    pieces differ: Elite token -> key code, the active-window check, and the key event
+    itself. Elite under Proton is an X11/XWayland client, so window queries go through
+    xdotool or xprop/wmctrl (common/eab_linux_input.py).
+    """
+
+    def __init__(self):
+        super().__init__()
+        import eab_linux_input
+        self._lin = eab_linux_input
+        self.keyboard = eab_linux_input.UinputKeyboard()
+        self.windows = eab_linux_input.X11Windows()
+
+    def vk_for(self, token):
+        return self._lin.keycode_for_elite_token(token)
+
+    def availability(self):
+        ok, why = self._lin.uinput_status()
+        if not ok:
+            return False, why
+        if not self.windows.can_query:
+            return False, self.windows.missing_tools_hint()
+        return True, ""
+
+    def elite_foreground(self):
+        # Fail closed: when the active window cannot be read, no key is ever sent.
+        if not self.windows.can_query:
+            self.last_window_title = ""
+            return False
+        title = self.windows.active_title()
+        self.last_window_title = title
+        return "elite - dangerous" in title.lower() and "launcher" not in title.lower()
+
+    def focus_elite(self):
+        if not self.windows.can_query:
+            raise RuntimeError(self.windows.missing_tools_hint())
+        window_id, title = self.windows.find_elite()
+        if not window_id:
+            raise RuntimeError("Elite Dangerous game window was not found.")
+        if not self.windows.can_activate:
+            raise RuntimeError("Elite was found, but " + self.windows.missing_tools_hint())
+        self.windows.activate(window_id)
+        for _ in range(8):
+            time.sleep(0.075)
+            if self.elite_foreground():
+                self.last_window_title = title
+                return title
+        raise RuntimeError("Elite was found, but the desktop did not let the Bridge make it the active window.")
+
+    def _send_vk(self, vk, key_up=False):
+        self.keyboard.key(vk, not key_up)
+
+
+def make_key_sender():
+    return WinKeySender() if os.name == "nt" else LinuxKeySender()
+
 
 class BridgeGlobalHotkeys:
     """Windows RegisterHotKey listener for Bridge-only actions.
@@ -7045,7 +7111,7 @@ class BridgeApp(tk.Tk):
         self.nav_history = deque(maxlen=100)
         self.bindings = BindingsManager()
         self.bindings_watch_status = "Watching Elite bindings for live changes."
-        self.key_sender = WinKeySender()
+        self.key_sender = make_key_sender()
 
         # v0.12.49: visual shield OCR and Auto SCB were removed. Native Elite shield telemetry remains available.
 
@@ -19026,8 +19092,9 @@ class BridgeApp(tk.Tk):
             return -1
 
     def _station_preflight(self):
-        if os.name != "nt":
-            return False, "Station automation is Windows-only."
+        sendable, why = self.key_sender.availability()
+        if not sendable:
+            return False, f"Station automation needs cockpit key sending: {why}"
         if not self._automation_enabled():
             return False, "No station automation toggles are enabled."
         if not self.state_data.flag("Docked"):
