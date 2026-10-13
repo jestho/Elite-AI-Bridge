@@ -2000,9 +2000,11 @@ class BridgeViewModel(QObject):
             # function and keypad keys as well as printable A-Z/0-9 shortcuts.
             keypad = bool(event.modifiers() & Qt.KeyboardModifier.KeypadModifier)
             # Prefer the raw Windows key code: with Shift held Qt reports Shift+1 as "!",
-            # and the default shortcuts are Ctrl+Alt+Shift+1..9.
+            # and the default shortcuts are Ctrl+Alt+Shift+1..9. Only Windows reports a
+            # virtual-key code here; on X11 it is a keysym, whose lowercase letters
+            # (0x61..0x7A) would read as F-keys.
             try:
-                nvk = int(event.nativeVirtualKey() or 0)
+                nvk = int(event.nativeVirtualKey() or 0) if sys.platform == "win32" else 0
             except Exception:
                 nvk = 0
             native = None

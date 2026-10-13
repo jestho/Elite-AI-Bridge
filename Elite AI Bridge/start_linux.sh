@@ -11,7 +11,7 @@
 #         start_linux.sh --setup    rebuild the private runtime, then start
 #         start_linux.sh --check    only check Python and system packages
 #         start_linux.sh --paths    show where the Bridge looks for Elite's files
-#         start_linux.sh --input    check cockpit key sending (uinput, X11 tools, Elite window)
+#         start_linux.sh --input    check cockpit key sending, hotkeys (uinput, keyboards, X11 tools)
 #
 # Everything the Bridge writes goes to $XDG_DATA_HOME/EliteAIBridge (usually
 # ~/.local/share/EliteAIBridge). See LINUX.md in the top folder for the details and
@@ -93,6 +93,8 @@ if [ "$MODE" = "input" ]; then
     echo
     echo "A press test types 'elite ai bridge' into the active window 1.5 s after you run:"
     echo "  $SYSTEM_PY \"$APP_ROOT/common/eab_linux_input.py\" --press-test"
+    echo "A hotkey test prints every Ctrl+Alt+Shift+<key> chord it sees for 15 s:"
+    echo "  $SYSTEM_PY \"$APP_ROOT/common/eab_linux_input.py\" --hotkey-test"
     exit 0
 fi
 # Cockpit actions need a virtual keyboard (/dev/uinput) and X11 tools. Warn, do not stop:
@@ -100,13 +102,15 @@ fi
 INPUT_WARN="$("$SYSTEM_PY" - <<'PY'
 import sys; sys.path.insert(0, "common"); import eab_linux_input as m
 ok, why = m.uinput_status()
-if not ok: print(why)
+if not ok: print("cockpit actions: " + why)
 w = m.X11Windows()
-if not w.can_query: print(w.missing_tools_hint())
+if not w.can_query: print("cockpit actions: " + w.missing_tools_hint())
+ok, why = m.keyboard_access_status()
+if not ok: print("hotkeys and keyboard push to talk: " + why)
 PY
 )"
 if [ -n "$INPUT_WARN" ]; then
-    echo "NOTE: cockpit actions (Dock, Launch, route plotting, macros) are off until this is fixed:"
+    echo "NOTE: some keyboard features are off until this is fixed:"
     printf '%s\n' "$INPUT_WARN" | sed 's/^/      /'
     echo "      See LINUX.md, 'Cockpit key sending'. Run with --input to re-check."
     echo

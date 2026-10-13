@@ -3936,6 +3936,51 @@ class BridgeGlobalHotkeys:
             pass
 
 
+class LinuxGlobalHotkeys:
+    """Linux counterpart of BridgeGlobalHotkeys: reads the keyboards through evdev
+    (common/eab_linux_input.py) instead of RegisterHotKey. Same specs, same queue,
+    same `registered` / `failures` / `status` attributes, and is_pressed() for
+    keyboard hold-to-talk release.
+    """
+
+    def __init__(self, specs, output_queue):
+        import eab_linux_input
+        self._listener = eab_linux_input.LinuxHotkeyListener(specs, output_queue)
+        self.specs = self._listener.specs
+        self.output_queue = output_queue
+        self.thread = None
+
+    @property
+    def registered(self):
+        return self._listener.registered
+
+    @property
+    def failures(self):
+        return self._listener.failures
+
+    @property
+    def status(self):
+        return self._listener.status
+
+    @status.setter
+    def status(self, value):
+        self._listener.status = value
+
+    def start(self):
+        self._listener.start()
+        self.thread = self._listener.thread
+
+    def stop(self):
+        self._listener.stop()
+
+    def is_pressed(self, command_id):
+        return self._listener.is_pressed(command_id)
+
+
+def make_global_hotkeys(specs, output_queue):
+    return BridgeGlobalHotkeys(specs, output_queue) if os.name == "nt" else LinuxGlobalHotkeys(specs, output_queue)
+
+
 class BridgeControllerManager:
     """Direct HOTAS/controller listener for Bridge actions.
 
@@ -6765,7 +6810,7 @@ class BridgeApp(tk.Tk):
         # The listener never executes Tk or Elite-control code from its worker
         # thread; it only queues an action for the normal Bridge poll loop.
         self.bridge_hotkey_queue = queue.Queue()
-        self.bridge_hotkeys = BridgeGlobalHotkeys(BRIDGE_HOTKEY_SPECS, self.bridge_hotkey_queue)
+        self.bridge_hotkeys = make_global_hotkeys(BRIDGE_HOTKEY_SPECS, self.bridge_hotkey_queue)
         self.bridge_hotkey_last_action = "-"
 
         # v0.12.57+ direct HOTAS/controller layer. Bindings use SDL GUID + product
@@ -10003,6 +10048,17 @@ class BridgeApp(tk.Tk):
     def _ptt_keyboard_hotkey(self):
         self._start_ptt_recording("PTT")
         if os.name != "nt":
+            listener = getattr(self, "bridge_hotkeys", None)
+            if not hasattr(listener, "is_pressed"):
+                return
+            def linux_release_watch():
+                try:
+                    time.sleep(0.04)
+                    while listener.is_pressed("push_to_talk"):
+                        time.sleep(0.025)
+                finally:
+                    self._stop_ptt_recording()
+            threading.Thread(target=linux_release_watch, daemon=True, name="EliteBridge-PTTKeyRelease").start()
             return
         def release_watch():
             try:

@@ -17,7 +17,12 @@
   xdotool or xprop/wmctrl, failing closed when they cannot. `RUN_CURRENT_SOURCE.sh --input`
   reports the setup. Station automation gates on the key sender's availability instead of
   the OS, and the game process is detected with pgrep.
-- Global hotkeys, keyboard push to talk and the Windows voice fallback remain Windows-only.
+- Bridge hotkeys and keyboard push to talk on Linux read the keyboards through evdev
+  (`/dev/input/event*`, same `input` group as uinput), honour each shortcut's own modifiers
+  and the bare F13 to F24 rule, ignore auto-repeat, see key release for real hold-to-talk,
+  and pick up keyboards plugged in later. Chords are not grabbed from other programs.
+- Hotkey capture in Setup > Controls no longer misreads lowercase X11 keysyms as F-keys.
+- The Windows voice fallback remains Windows-only.
 
 ### Changed
 - `Elite AI Bridge/common/eab_platform.py` is the one place that resolves Elite's folders

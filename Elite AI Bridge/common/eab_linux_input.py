@@ -294,14 +294,306 @@ class X11Windows:
             return False
 
 
+# --- Global hotkeys and hold-to-talk: reading the real keyboards -----------------------
+#
+# Windows registers chords with RegisterHotKey. Linux has no desktop-neutral equivalent,
+# so the Bridge reads the keyboards themselves through /dev/input/event* (the evdev
+# interface, the mirror image of uinput above). That works on X11 and Wayland, whatever
+# window is focused, and reports key release, which is what hold-to-talk needs. The same
+# "input" group that allows /dev/uinput gives read access to these devices on every
+# common distribution. Keys are never grabbed, so Elite still sees them; the Setup page
+# already refuses a chord that Elite uses.
+
+EV_KEY_VALUE_UP, EV_KEY_VALUE_DOWN, EV_KEY_VALUE_REPEAT = 0, 1, 2
+INPUT_DEVICES_PROC = "/proc/bus/input/devices"
+INPUT_DEV_DIR = "/dev/input"
+
+MODIFIER_KEYS = {
+    KEY["LEFTCTRL"]: "CTRL", KEY["RIGHTCTRL"]: "CTRL",
+    KEY["LEFTALT"]: "ALT", KEY["RIGHTALT"]: "ALT",
+    KEY["LEFTSHIFT"]: "SHIFT", KEY["RIGHTSHIFT"]: "SHIFT",
+    KEY["LEFTMETA"]: "WIN", KEY["RIGHTMETA"]: "WIN",
+}
+_MOD_WORDS = {"CTRL": "CTRL", "CONTROL": "CTRL", "ALT": "ALT", "SHIFT": "SHIFT", "WIN": "WIN", "META": "WIN", "SUPER": "WIN"}
+
+# Windows virtual-key codes (what the Bridge stores for a hotkey) -> KEY_* codes.
+VK_TO_KEY = {
+    0x08: "BACKSPACE", 0x09: "TAB", 0x0D: "ENTER", 0x13: "PAUSE", 0x14: "CAPSLOCK", 0x1B: "ESC",
+    0x20: "SPACE", 0x21: "PAGEUP", 0x22: "PAGEDOWN", 0x23: "END", 0x24: "HOME",
+    0x25: "LEFT", 0x26: "UP", 0x27: "RIGHT", 0x28: "DOWN", 0x2C: "SYSRQ", 0x2D: "INSERT", 0x2E: "DELETE",
+    0x5D: "COMPOSE", 0x6A: "KPASTERISK", 0x6B: "KPPLUS", 0x6D: "KPMINUS", 0x6E: "KPDOT", 0x6F: "KPSLASH",
+    0x90: "NUMLOCK", 0x91: "SCROLLLOCK",
+    0xBA: "SEMICOLON", 0xBB: "EQUAL", 0xBC: "COMMA", 0xBD: "MINUS", 0xBE: "DOT", 0xBF: "SLASH", 0xC0: "GRAVE",
+    0xDB: "LEFTBRACE", 0xDC: "BACKSLASH", 0xDD: "RIGHTBRACE", 0xDE: "APOSTROPHE",
+}
+VK_TO_KEY.update({0x30 + n: str(n) for n in range(10)})
+VK_TO_KEY.update({0x41 + n: chr(ord("A") + n) for n in range(26)})
+VK_TO_KEY.update({0x60 + n: f"KP{n}" for n in range(10)})
+VK_TO_KEY.update({0x70 + n: f"F{n + 1}" for n in range(24)})
+
+# The key names the Setup page shows ("Num 7", "Page Up", "Num Enter"...) -> KEY_* names.
+_DISPLAY_KEY = {
+    "PAGEUP": "PAGEUP", "PAGEDOWN": "PAGEDOWN", "END": "END", "HOME": "HOME",
+    "LEFT": "LEFT", "UP": "UP", "RIGHT": "RIGHT", "DOWN": "DOWN", "INSERT": "INSERT", "DELETE": "DELETE",
+    "SPACE": "SPACE", "TAB": "TAB", "ENTER": "ENTER", "RETURN": "ENTER", "NUMENTER": "KPENTER",
+    "BACKSPACE": "BACKSPACE", "ESC": "ESC", "ESCAPE": "ESC",
+}
+
+
+def keycode_for_hotkey(display: str, vk: int) -> int:
+    """KEY_* code for a Bridge hotkey spec. The display's key name wins (it tells
+    "Num Enter" from "Enter"); the Windows virtual-key code is the fallback."""
+    name = str(display or "").split("+")[-1].strip().upper().replace(" ", "")
+    if name in _DISPLAY_KEY:
+        return KEY[_DISPLAY_KEY[name]]
+    if name.startswith("NUM") and name[3:].isdigit():
+        return KEY["KP" + name[3:]]
+    if name in KEY and (len(name) == 1 or name.startswith("F")):
+        return KEY[name]
+    if int(vk or 0) in VK_TO_KEY:
+        return KEY[VK_TO_KEY[int(vk)]]
+    raise ValueError(f"Unsupported hotkey {display!r} (vk 0x{int(vk or 0):02X})")
+
+
+def modifiers_for_hotkey(display: str) -> frozenset:
+    """The modifier set a chord's display names, e.g. "Ctrl+Alt+Shift+P" -> {CTRL, ALT, SHIFT}."""
+    return frozenset(_MOD_WORDS[p.strip().upper()] for p in str(display or "").split("+")[:-1]
+                     if p.strip().upper() in _MOD_WORDS)
+
+
+def _bitmap_has(words: list[str], bit: int) -> bool:
+    # /proc prints the bitmap as 64-bit hex words, most significant first.
+    try:
+        index = bit // 64
+        word = int(words[len(words) - 1 - index], 16) if index < len(words) else 0
+        return bool(word >> (bit % 64) & 1)
+    except Exception:
+        return False
+
+
+def list_keyboards(proc_path: str = INPUT_DEVICES_PROC) -> list[dict]:
+    """Keyboards from /proc/bus/input/devices: [{name, node, readable}], own virtual one excluded."""
+    try:
+        text = Path(proc_path).read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return []
+    found = []
+    for block in text.split("\n\n"):
+        name, handlers, ev_bits, key_words = "", "", "0", []
+        for line in block.splitlines():
+            if line.startswith("N: Name="):
+                name = line[8:].strip().strip('"')
+            elif line.startswith("H: Handlers="):
+                handlers = line[12:]
+            elif line.startswith("B: EV="):
+                ev_bits = line[6:].strip()
+            elif line.startswith("B: KEY="):
+                key_words = line[7:].split()
+        event = next((h for h in handlers.split() if h.startswith("event")), "")
+        if not event or not name:
+            continue
+        try:
+            has_ev_key = bool(int(ev_bits, 16) >> EV_KEY & 1)
+        except Exception:
+            has_ev_key = False
+        # A keyboard has letters and a modifier; this skips mice, pads, power buttons, HOTAS.
+        if not has_ev_key or not all(_bitmap_has(key_words, KEY[k]) for k in ("A", "Z", "LEFTSHIFT", "ENTER")):
+            continue
+        if name.startswith("Elite AI Bridge"):
+            continue
+        node = os.path.join(INPUT_DEV_DIR, event)
+        found.append({"name": name, "node": node, "readable": os.access(node, os.R_OK)})
+    return found
+
+
+def keyboard_access_status() -> tuple[bool, str]:
+    """(usable, reason) for reading the keyboards. Never opens a device."""
+    boards = list_keyboards()
+    if not boards:
+        return False, "no keyboard found in /proc/bus/input/devices"
+    if not any(b["readable"] for b in boards):
+        return False, ("no read access to /dev/input/event*: put your user in the 'input' group "
+                       "(see LINUX.md), then log out and in")
+    return True, ""
+
+
+class LinuxHotkeyListener:
+    """Watches every keyboard for Bridge chords. Same shape as the engine's
+    BridgeGlobalHotkeys: specs of (command_id, display, vk, label), a queue that
+    receives command ids on key-down, plus `registered`, `failures` and `status`.
+
+    is_pressed(command_id) answers whether the chord's key is physically held, which
+    is what keyboard hold-to-talk polls for release. Chords need their exact modifier
+    set, as RegisterHotKey does, and auto-repeat never re-fires a command.
+    """
+
+    RESCAN_SECONDS = 3.0
+
+    def __init__(self, specs, output_queue, force_modifiers=frozenset({"CTRL", "ALT", "SHIFT"}), free_keys=None):
+        self.specs = tuple(specs or ())
+        self.output_queue = output_queue
+        self.force_modifiers = frozenset(force_modifiers or ())
+        # keys allowed without a modifier (F13..F24 on Windows: HOTAS software emits them)
+        self.free_keys = set(free_keys if free_keys is not None else (KEY[f"F{n}"] for n in range(13, 25)))
+        self.registered: dict[str, str] = {}
+        self.failures: dict[str, dict] = {}
+        self.status = "Not started"
+        self.thread: threading.Thread | None = None
+        self.running = False
+        self._chords: dict[int, list[tuple[frozenset, str]]] = {}   # keycode -> [(modifiers, command_id)]
+        self._command_key: dict[str, int] = {}
+        self._pressed: set[int] = set()
+        self._lock = threading.Lock()
+        self._wake_r, self._wake_w = os.pipe()
+        self._devices: dict[str, int] = {}  # node -> fd
+        self.keyboards_seen = 0
+
+    # -- setup ---------------------------------------------------------------------
+    def _compile(self) -> None:
+        self._chords.clear()
+        self._command_key.clear()
+        self.registered.clear()
+        self.failures.clear()
+        seen: dict[tuple[int, frozenset], str] = {}
+        for command_id, display, vk, _label in self.specs:
+            try:
+                code = keycode_for_hotkey(display, vk)
+                mods = modifiers_for_hotkey(display)
+                if not mods and code not in self.free_keys:
+                    mods = self.force_modifiers  # never take a plain key from the game
+                if (code, mods) in seen:
+                    raise ValueError(f"same chord as {seen[(code, mods)]}")
+                seen[(code, mods)] = command_id
+            except Exception as exc:
+                self.failures[command_id] = {"display": display, "error": str(exc)}
+                continue
+            self._chords.setdefault(code, []).append((mods, command_id))
+            self._command_key[command_id] = code
+            self.registered[command_id] = display
+
+    def start(self) -> None:
+        if self.thread and self.thread.is_alive():
+            return
+        self._compile()
+        ok, why = keyboard_access_status()
+        if not ok:
+            self.registered.clear()
+            self.failures = {cid: {"display": disp, "error": why} for cid, disp, _vk, _l in self.specs}
+            self.status = f"0/{len(self.specs)} Bridge hotkeys active: {why}"
+            return
+        self.running = True
+        self.thread = threading.Thread(target=self._run, name="EliteBridge-LinuxHotkeys", daemon=True)
+        self.thread.start()
+        self.status = f"{len(self.registered)}/{len(self.specs)} Bridge hotkeys active on all keyboards."
+        if self.failures:
+            self.status += " Some shortcuts could not be mapped."
+
+    def stop(self) -> None:
+        self.running = False
+        try:
+            os.write(self._wake_w, b"x")
+        except Exception:
+            pass
+        t = self.thread
+        if t is not None and t.is_alive() and t is not threading.current_thread():
+            t.join(1.5)
+
+    def is_pressed(self, command_id: str) -> bool:
+        code = self._command_key.get(str(command_id))
+        with self._lock:
+            return bool(code is not None and code in self._pressed and self.running)
+
+    # -- the reader thread -----------------------------------------------------------
+    def _rescan(self) -> None:
+        wanted = {b["node"] for b in list_keyboards() if b["readable"]}
+        for node in list(self._devices):
+            if node not in wanted:
+                self._close(node)
+        for node in wanted - set(self._devices):
+            try:
+                self._devices[node] = os.open(node, os.O_RDONLY | os.O_NONBLOCK)
+            except Exception:
+                pass
+        self.keyboards_seen = len(self._devices)
+
+    def _close(self, node: str) -> None:
+        fd = self._devices.pop(node, None)
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+
+    def _run(self) -> None:
+        import select
+        last_scan = 0.0
+        try:
+            while self.running:
+                now = time.monotonic()
+                if now - last_scan >= self.RESCAN_SECONDS:
+                    self._rescan()
+                    last_scan = now
+                fds = list(self._devices.values()) + [self._wake_r]
+                try:
+                    ready, _, _ = select.select(fds, [], [], self.RESCAN_SECONDS)
+                except Exception:
+                    time.sleep(0.2)
+                    continue
+                for fd in ready:
+                    if fd == self._wake_r:
+                        try:
+                            os.read(self._wake_r, 64)
+                        except Exception:
+                            pass
+                        continue
+                    node = next((n for n, f in self._devices.items() if f == fd), None)
+                    try:
+                        data = os.read(fd, _INPUT_EVENT.size * 64)
+                    except BlockingIOError:
+                        continue
+                    except Exception:
+                        if node:
+                            self._close(node)  # unplugged
+                        continue
+                    for offset in range(0, len(data) - _INPUT_EVENT.size + 1, _INPUT_EVENT.size):
+                        _sec, _usec, etype, code, value = _INPUT_EVENT.unpack_from(data, offset)
+                        if etype == EV_KEY:
+                            self._on_key(code, value)
+        finally:
+            for node in list(self._devices):
+                self._close(node)
+            with self._lock:
+                self._pressed.clear()
+
+    def _on_key(self, code: int, value: int) -> None:
+        if value == EV_KEY_VALUE_REPEAT:
+            return
+        with self._lock:
+            if value == EV_KEY_VALUE_DOWN:
+                self._pressed.add(code)
+            else:
+                self._pressed.discard(code)
+            held_mods = frozenset(MODIFIER_KEYS[k] for k in self._pressed if k in MODIFIER_KEYS)
+        if value != EV_KEY_VALUE_DOWN or code in MODIFIER_KEYS:
+            return
+        for mods, command_id in self._chords.get(code, ()):
+            if mods == held_mods:
+                self.output_queue.put(command_id)
+                break
+
+
 # --- Diagnostics ---------------------------------------------------------------------
 
 def describe() -> dict[str, str]:
     ok, why = uinput_status()
     win = X11Windows()
     elite_id, elite_title = win.find_elite() if win.can_query else ("", "")
+    kb_ok, kb_why = keyboard_access_status()
+    boards = list_keyboards()
     return {
         "uinput": "ready" if ok else why,
+        "keyboards": (f"{sum(1 for b in boards if b['readable'])}/{len(boards)} readable: "
+                      + ", ".join(b["name"] for b in boards)) if kb_ok else kb_why,
         "display": os.environ.get("DISPLAY", "") or "(not set)",
         "session": os.environ.get("XDG_SESSION_TYPE", "") or "(unknown)",
         "xdotool": win.xdotool or "(not found)",
@@ -316,6 +608,24 @@ if __name__ == "__main__":
     import sys
     for key, value in describe().items():
         print(f"{key:14} {value}")
+    if "--hotkey-test" in sys.argv:
+        # Prints every Bridge default chord it sees for 15 seconds (Ctrl+Alt+Shift+P ...).
+        import queue as _queue
+        q: "_queue.Queue[str]" = _queue.Queue()
+        specs = [(f"key_{ch}", f"Ctrl+Alt+Shift+{ch}", ord(ch), ch) for ch in "PTCDLJ123456789EXV"]
+        listener = LinuxHotkeyListener(specs, q)
+        listener.start()
+        print(listener.status)
+        print("Press Ctrl+Alt+Shift+<letter or digit> anywhere; watching for 15 s...")
+        end = time.time() + 15
+        while time.time() < end:
+            try:
+                cmd = q.get(timeout=0.5)
+                print("  chord:", cmd, "(still held)" if listener.is_pressed(cmd) else "")
+            except _queue.Empty:
+                pass
+        listener.stop()
+        print("done")
     if "--press-test" in sys.argv:
         # Types "elite ai bridge" into whatever window is active, 1.5 s from now.
         print("Press test: focus a text field now...")

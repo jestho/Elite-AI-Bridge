@@ -19,9 +19,10 @@ does not work yet" before you spend time on it.
 - Cockpit actions: Dock, Launch, Clear and Jump, route plotting, station services, combat
   macros, Dynamic PIPs, auto chaff and the trade loop, after the one-time setup below.
 
+- Bridge hotkeys (Ctrl+Alt+Shift+P and the rest) and keyboard push to talk, read from your
+  keyboards directly, after the same one-time setup.
+
 ## What does not work yet
-- **Global hotkeys and keyboard push to talk.** These use Windows `RegisterHotKey`. Map
-  push to talk to a HOTAS or controller button instead.
 - **The Windows system voice fallback.** Only Supertonic is available. If its model
   failed to download, the Bridge is silent.
 - **The in-game overlay on native Wayland.** Qt cannot place a window over another
@@ -97,6 +98,28 @@ nothing needs to be rebound. On a Wayland desktop the active-window check only s
 windows (the game and the Bridge itself, which the launcher starts under XWayland), which
 is enough for the safety check.
 
+## Bridge hotkeys and keyboard push to talk
+On Windows the Bridge shortcuts (Ctrl+Alt+Shift+P for Target Power Plant, Ctrl+Alt+Shift+V
+for push to talk, and so on) are registered with the system. Linux desktops have no
+shared way to do that, so the Bridge reads your keyboards directly through
+`/dev/input/event*`, the counterpart of the virtual keyboard above. The `input` group
+from step 1 is all it needs. It works on X11 and Wayland, whatever window is focused,
+and it sees key release, so keyboard push to talk is real hold-to-talk.
+
+Differences from Windows:
+
+- The chords are not taken away from other programs. Elite also receives
+  Ctrl+Alt+Shift+P, which it ignores unless you bound it; the Setup page refuses a Bridge
+  shortcut that Elite already uses.
+- Each key keeps the modifiers shown in Setup, with F13 to F24 usable bare (HOTAS software
+  emits them). A key saved without a modifier is treated as Ctrl+Alt+Shift+key, as on
+  Windows.
+- Keyboards plugged in later are picked up within a few seconds.
+
+`./RUN_CURRENT_SOURCE.sh --input` lists the keyboards it can read and prints a 15-second
+hotkey test command. Setup > Controls shows NOT REGISTERED on every row while the
+keyboards cannot be read.
+
 ## Where things are
 Elite under Proton keeps its files inside the game's Wine prefix (Steam app id 359320).
 The Bridge looks for that prefix in every Steam library listed in `libraryfolders.vdf`,
@@ -139,6 +162,9 @@ Delete that file to forget the key.
 - **Dock, Launch or a route plot says "unavailable", "not the foreground window" or
   "Windows-only":** run `./RUN_CURRENT_SOURCE.sh --input`. Usually `/dev/uinput` is not
   writable yet (log out and in after adding the group) or `xdotool` is missing.
+- **Setup > Controls shows every shortcut as NOT REGISTERED, or push to talk never
+  starts:** the keyboards cannot be read. Run `./RUN_CURRENT_SOURCE.sh --input`; the
+  usual cause is the `input` group not being active yet (log out and in).
 - **Keys reach the desktop but not the game:** click into the game window once so it has
   keyboard focus, and check that Elite's own Options > Controls show your keyboard preset.
 - **Logs:** `~/.local/share/EliteAIBridge/qml_backend.log` and

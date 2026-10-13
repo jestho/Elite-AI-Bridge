@@ -8,8 +8,8 @@ af9b6012869d34bb9c21d84f846c09506962b7387188d84fce0b3a05b9d7e17e  ./Elite AI Bri
 9abce3b1436d46a0cb2cd02bbbdc5d97e5c2d0e1fdb884c8c84e93bfaee67c17  ./Elite AI Bridge/backend/Assets/hero_console_shell_2560.png
 b522e1593b56a42ae661c1a121c99db7c762828912ececd2131f0154ac33f092  ./Elite AI Bridge/backend/Assets/hero_console_shell_3840.png
 a2c1bbf2fc3b461c7a3ca92a61f6780ca6d778835be7c039d5d2bb9fa93994c5  ./Elite AI Bridge/backend/Assets/hero_console_shell_5120.png
-883e8a10bd245616773429d32072baa881ae8a4d3b2e14a014bbd1a5a29725a4  ./Elite AI Bridge/backend/backend_host.py
-c900a17e58dd4e1e5afcbefd56089c5745b308fa12c30fbcb0ce60e9392103b4  ./Elite AI Bridge/backend/EliteAIBridge_v0_12_95.py
+ddd463e8b2e3fabf19674ccbf0e939580385bc5d9a0178f9cb805ce2d72e5b5a  ./Elite AI Bridge/backend/backend_host.py
+258856afdfd8672db4aa1132333344c52558fd132d3ae3d4937bd95dce2d33a8  ./Elite AI Bridge/backend/EliteAIBridge_v0_12_95.py
 5fb549dd1b33f6d95dcf1265c1e63de05a57881704db4173774e972d360a2d37  ./Elite AI Bridge/backend/README.txt
 e5df730e2225123cf266afff0c7769b8e8fd12a1ef8303f3f5f8783f7c6d5f05  ./Elite AI Bridge/backend/requirements.txt
 7f6cf88083180201710d76f468be7390d3559eb528f15c85621d6bb4468a5805  ./Elite AI Bridge/backend/Sounds/attention.wav
@@ -26,7 +26,7 @@ ffec1fba2c3f37ac4ed7008b3fa71bfa4ce3c7472fde885c7e948dfad60eefc5  ./Elite AI Bri
 ae2b19c36089cb0a92e303eca1800cb8c85a0e4c27d1d79d57f87f027b3ed47c  ./Elite AI Bridge/backend/Sounds/ui_confirm.wav
 77f9212d8949c1b4c2ed61d3336540152db8e569e8b49f74d8a8cf517651c3eb  ./Elite AI Bridge/backend/Sounds/ui_nav.wav
 0e097799ebbd05724232edf2a8d839cf76b120812064198bbf96d6166ffd4521  ./Elite AI Bridge/backend/Sounds/ui_warning.wav
-4cc45ff4f197dec90eab02026bf523f7e88b2ffb5451913916461b67cbafad4b  ./Elite AI Bridge/common/eab_linux_input.py
+2116ffa03c36d329e3180dd5630368747c8ef56312ad439106883bfd6f66214e  ./Elite AI Bridge/common/eab_linux_input.py
 e69b76c930cef6e451b5ceba8d3b95a91b3f7e296fd96ec22193b207f6cb3d9e  ./Elite AI Bridge/common/eab_platform.py
 46d03df6579daab540d4c9c4058668012e63fcfed92092db4266289b943064e1  ./Elite AI Bridge/constraints.txt
 4f19629a44401d510c04e624fcee0d966f01f17e4b1f0dedf1641aa668ef7747  ./Elite AI Bridge/docs/DISCLAIMER.md
@@ -35,7 +35,7 @@ e69b76c930cef6e451b5ceba8d3b95a91b3f7e296fd96ec22193b207f6cb3d9e  ./Elite AI Bri
 6eb12ef16b8b09ead6a1bac247cc74ea5dbf6be21b6570bfb49be7857195e3b7  ./Elite AI Bridge/docs/README.md
 b32e41b6408b555f6a0c98409f0a3590c205c975bc2ae0435aaeae6f285da8d3  ./Elite AI Bridge/docs/THIRD_PARTY_NOTICES.md
 643498d0799f0b2602d538e39e1bfe44868c37b019118601edadaf24fdccce18  ./Elite AI Bridge/frontend/boot_splash.py
-d4395ed4d025a2ff3a6c42fde4b724b70e1760cfa373fb1a70db653eddd5a420  ./Elite AI Bridge/frontend/main.py
+4a2ee0fcf715d4b2a031b21da7e2a0981dc11e3ccf0b2680cdb30aa8562410b6  ./Elite AI Bridge/frontend/main.py
 3359a072527ca1a335c7f0b28f5eb32c7ac1af7f152cce2077aaac9922869c7f  ./Elite AI Bridge/frontend/qml/assets/ship_art/ship_cat_large_combat.png
 0ec6f86592a474b9541a8434b2e509d4226df80e232191d0c50038e9ad64daef  ./Elite AI Bridge/frontend/qml/assets/ship_art/ship_cat_large_freighter_hauler.png
 661d06959c8acf67eaafa030b433750c39301662654faa0fc69e244bc86d59c1  ./Elite AI Bridge/frontend/qml/assets/ship_art/ship_cat_large_passenger_luxury_liner.png
@@ -121,12 +121,12 @@ a32079c50a6390bded34b0d0eb2779c1b83f9e964083b6c452482ed3f73ba101  ./Elite AI Bri
 05bb6780db575b74b12ab6f939cbe0371b938146fb37ca37c6e63b481352a8cf  ./Elite AI Bridge/README.txt
 788200245b3ea2d6b75599a7b6695dbf41732ba1a2c7c50a5a63382d5d527a49  ./Elite AI Bridge/requirements.txt
 363c71ce75fde536e24cd5e00024d800d8c9254677b71c5e42cc47145966ecdc  ./Elite AI Bridge/START_HERE.bat
-a67d041f357cfb60f428b30d764d92c68c711df52aa9fa7774ab861dfe4b2e3a  ./Elite AI Bridge/start_linux.sh
+a2781a944de9a44fdaf8c5a83a2e1ca095f7f44e9a3425afcd288d2448162d1f  ./Elite AI Bridge/start_linux.sh
 6bf915d086a78c3ef5fb1ab5357f40b869eebb2213a1709a96b7b1441e7e74ab  ./Elite_AI_Bridge_Setup.iss
 2dc039694aaee2135a916ee3b326a6b7be328b64c1ad378281412b495d973fe1  ./LICENSE.txt
-d97bb547f177fdfa8151cc102598efdd27ecc312c266b950dad5c3ef75046a42  ./LINUX.md
+7bd0ae204bba7209aae8e575962b88d1376a6833b865f8b0be959c5c7879bcf4  ./LINUX.md
 3b7529cc011cd29e204e629ffa10086141e3129044755f637caaaadd5eb60c73  ./PRIVACY_AND_API_KEYS.md
-d51ee8c56464cc6d38322589b1d32c1fbf9bb8945a90b82208b4193d6f2f6250  ./README.md
+747b8c7148d2577db164c9903ca5d50ae6224428d3e797eee1972ff2e5bb5688  ./README.md
 9429472b8e77c87045d3d07e851e8ae86d2e9a4f8f41c74e7d57a51a26c9c321  ./README_BOOT_SPLASH.md
 ebfd6ec98e8f63393201d6c6570391ef0ee68aabdc2b8a459eb528dd4abb810d  ./README_BUILD.txt
 93750fa85e8ef47706fe031c5e13b6c462f09b2b0daaedd89fbca49b9de1dbd1  ./README_FIRST.txt

@@ -9731,6 +9731,10 @@ class QmlGlobalHotkeys(legacy.BridgeGlobalHotkeys):
 
 if os.name == "nt":
     legacy.BridgeGlobalHotkeys = QmlGlobalHotkeys
+else:
+    # Linux: the evdev listener already honours each key's own modifiers and the
+    # F13..F24 exception, so it stands in for QmlGlobalHotkeys directly.
+    legacy.BridgeGlobalHotkeys = legacy.LinuxGlobalHotkeys
 
 
 _ELITE_MOD_NAMES = {"Key_LeftControl": "CTRL", "Key_RightControl": "CTRL", "Key_LeftAlt": "ALT", "Key_RightAlt": "ALT",
