@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Linux (experimental)
+- The Bridge can be started on Linux with `RUN_CURRENT_SOURCE.sh` when Elite Dangerous runs
+  under Steam Proton. The journal, Status.json, bindings and DisplaySettings.xml are found
+  inside the Proton prefix (every Steam library is checked), Bridge data lives in
+  `~/.local/share/EliteAIBridge`, and `ELITE_JOURNAL_DIR`, `ELITE_BINDINGS_DIR`,
+  `ELITE_PROTON_PREFIX` and `ELITE_AI_BRIDGE_DATA_DIR` override the lookup. See LINUX.md.
+- Sound effects and the Supertonic voice play through sounddevice on any OS; they were
+  refused outside Windows before.
+- The verified OpenAI key is kept between runs on Linux in an owner-only file in the Bridge
+  data folder (Windows keeps using the user environment variable).
+- Cockpit key sending, global hotkeys and the Windows voice fallback remain Windows-only.
+
+### Changed
+- `Elite AI Bridge/common/eab_platform.py` is the one place that resolves Elite's folders
+  and the Bridge data folder; Windows paths are unchanged.
+
 ## 2.0.0 - 2026-10-10
 
 A complete redesign of Elite AI Bridge.

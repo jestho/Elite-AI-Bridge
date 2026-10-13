@@ -23,8 +23,12 @@ ready at 14.2 s the docked frame holds (station keeps turning) until it is, or u
 
 import math
 import random
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+import eab_platform
 
 from PySide6.QtCore import QPointF, QRectF, QTimer, Qt, QLineF
 from PySide6.QtGui import (QBrush, QColor, QFont, QFontDatabase, QImage, QLinearGradient, QPainter,
@@ -1341,7 +1345,7 @@ class BootSplash(QWidget):
             line = ("%s  frames %d  fps %.1f  paint avg %.1f ms  p95 %.1f ms  window %dx%d @ %.2fx\n"
                     % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(ft), len(ft) / span, avg * 1000, p95 * 1000,
                        self.width(), self.height(), dpr))
-            base = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "EliteAIBridge"
+            base = eab_platform.data_dir()
             base.mkdir(parents=True, exist_ok=True)
             with open(base / "splash_perf.log", "a", encoding="utf-8") as f:
                 f.write(line)

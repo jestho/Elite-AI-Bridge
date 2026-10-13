@@ -44,6 +44,8 @@ or support material. See [Privacy and API Keys](PRIVACY_AND_API_KEYS.md).
   `frontend/` (PySide6 / QML interface), `backend/` (game, voice and automation engine),
   `assets/`, `docs/`, the runtime setup script and the pinned package lists.
 - `Elite_AI_Bridge_Setup.iss` and `BUILD_INSTALLER.bat` build the Windows installer with Inno Setup 6.
+- `Elite AI Bridge/common/eab_platform.py` resolves the journal, bindings and data folders on
+  Windows and on Linux (Proton prefix).
 - `SHA256SUMS.txt` lists a checksum for every file in the release source.
 
 ## Building
@@ -53,6 +55,10 @@ the exact package versions in `Elite AI Bridge/requirements.txt` and `constraint
 
 To run from source on Windows, run `RUN_CURRENT_SOURCE.bat`. On the first run it sets up
 the same private runtime the installer uses (internet needed), then starts the Bridge.
+
+On Linux, with Elite Dangerous running under Steam Proton, run `RUN_CURRENT_SOURCE.sh`.
+This is experimental: the dashboard, data, voice and AI features work, cockpit key sending
+does not yet. See [LINUX.md](LINUX.md) for requirements and limits.
 
 ## Reporting a bug
 In the Bridge, go to Setup > Status. Press MAKE SUPPORT FILE, then REPORT ON GITHUB or

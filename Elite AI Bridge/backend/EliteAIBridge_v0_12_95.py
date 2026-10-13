@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import time
 import threading
 import hashlib
@@ -57,14 +58,19 @@ except Exception as _sd_exc:
 APP_NAME = "Elite AI Bridge"
 APP_VERSION = "0.12.95 - Hero Recovery"
 
-JOURNAL_DIR = Path.home() / "Saved Games" / "Frontier Developments" / "Elite Dangerous"
+# Elite's folders and the Bridge data folder come from common/eab_platform.py so Windows
+# and Linux (Elite under Proton) resolve them in one place. See that file for overrides.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+import eab_platform
+
+JOURNAL_DIR = eab_platform.journal_dir()
 STATUS_FILE = JOURNAL_DIR / "Status.json"
 MARKET_FILE = JOURNAL_DIR / "Market.json"
 CARGO_FILE = JOURNAL_DIR / "Cargo.json"
 NAVROUTE_FILE = JOURNAL_DIR / "NavRoute.json"
 MODULESINFO_FILE = JOURNAL_DIR / "ModulesInfo.json"
 
-BRIDGE_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "EliteAIBridge"
+BRIDGE_DATA_DIR = eab_platform.data_dir()
 BRIDGE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 EDDN_CACHE_FILE = BRIDGE_DATA_DIR / "eddn_market_cache.sqlite3"
 TRADE_LOOP_CONFIG_FILE = BRIDGE_DATA_DIR / "trade_loop.json"
@@ -79,10 +85,7 @@ EDDATA_BASE = "https://api.eddata.dev/v2"
 ARDENT_BASE = "https://api.ardent-insight.com/v2"
 INTRA_RES_API = "https://iniv.space/intra/api/"
 
-LOCAL_BINDINGS_DIR = (
-    Path(os.environ.get("LOCALAPPDATA", ""))
-    / "Frontier Developments" / "Elite Dangerous" / "Options" / "Bindings"
-)
+LOCAL_BINDINGS_DIR = eab_platform.bindings_dir()
 BUNDLED_BINDINGS_DIR = Path(__file__).resolve().parent / "Bindings"
 NAV_BINDING_ACTIONS = [
     "GalaxyMapOpen",
@@ -4326,8 +4329,8 @@ class BridgeSFXManager:
             self.enabled_by_key = merged
         if not self.enabled:
             self.status = "OFF"
-        elif os.name != "nt":
-            self.status = "Unavailable • Windows playback required"
+        elif os.name != "nt" and not SOUNDDEVICE_AVAILABLE:
+            self.status = "Unavailable • sounddevice (PortAudio) is required on this OS"
         elif not self.sounds_dir.exists():
             self.status = f"Sounds folder missing: {self.sounds_dir}"
         else:
@@ -4414,8 +4417,8 @@ class BridgeSFXManager:
         if not allow_disabled and not bool(self.enabled_by_key.get(key, True)):
             self.last_error = f"{spec['label']} is disabled"
             return False
-        if os.name != "nt":
-            self.status = "Unavailable • Windows playback required"
+        if os.name != "nt" and not SOUNDDEVICE_AVAILABLE:
+            self.status = "Unavailable • sounddevice (PortAudio) is required on this OS"
             return False
         source, _is_custom = self.source_for(key)
         if not source.exists():
@@ -4902,9 +4905,8 @@ class VoiceSpeechWorker:
             self.status = "READY • Supertonic unavailable; Windows fallback armed"
 
     def _speak_supertonic(self, text, cfg):
-        if os.name != "nt":
-            raise RuntimeError("Supertonic playback is currently configured for Windows.")
-        import winsound
+        if os.name != "nt" and not SOUNDDEVICE_AVAILABLE:
+            raise RuntimeError("Supertonic playback needs sounddevice (PortAudio) on this OS.")
         tts = self._load_supertonic()
         voice = str(cfg.get("voice") or "M1").upper()
         if voice not in self.SUPER_VOICES:
@@ -4949,6 +4951,7 @@ class VoiceSpeechWorker:
             if SOUNDDEVICE_AVAILABLE:
                 _play_pcm_wav_blocking(tmp_path, output_device)
             else:
+                import winsound
                 winsound.PlaySound(tmp_path, winsound.SND_FILENAME)
         finally:
             if tmp_path:
@@ -24782,7 +24785,8 @@ class BridgeApp(tk.Tk):
 
     def open_journal_folder(self):
         try:
-            os.startfile(JOURNAL_DIR)
+            if not eab_platform.open_folder(JOURNAL_DIR):
+                raise RuntimeError("no file manager available")
             self.connection_var.set("Opened Elite journal folder")
         except Exception as exc:
             messagebox.showerror("Open Journal Folder", f"Could not open the Elite journal folder:\n\n{JOURNAL_DIR}\n\n{exc}")
@@ -24790,7 +24794,8 @@ class BridgeApp(tk.Tk):
     def open_custom_sfx_folder(self):
         try:
             CUSTOM_SFX_DIR.mkdir(parents=True, exist_ok=True)
-            os.startfile(CUSTOM_SFX_DIR)
+            if not eab_platform.open_folder(CUSTOM_SFX_DIR):
+                raise RuntimeError("no file manager available")
             self.connection_var.set("Opened managed custom sound library")
         except Exception as exc:
             messagebox.showerror("Custom Sound Library", f"Could not open the managed custom sound folder:\n\n{CUSTOM_SFX_DIR}\n\n{exc}")

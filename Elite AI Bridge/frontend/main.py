@@ -24,6 +24,10 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication
 from boot_splash import BootSplash
 
+# Shared per-platform paths (Windows, or Linux with Elite under Proton).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+import eab_platform
+
 INTEGRATION_VERSION = "0.30.20"
 LIVE_COMMANDS = {
     "dock", "launch", "clear", "cancel",
@@ -203,8 +207,7 @@ class BackendProcess:
         elif self.host_script is None or not self.host_script.exists():
             raise FileNotFoundError(f"Backend host not found: {self.host_script}")
 
-        local_appdata = Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
-        log_dir = local_appdata / "EliteAIBridge"
+        log_dir = eab_platform.data_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
         # Beta logging is intentionally lightweight, but the stdout log used to
         # append forever. Rotate at 5 MiB so long-running testers cannot slowly
@@ -1040,7 +1043,7 @@ class BridgeViewModel(QObject):
                     self._window.frameSwapped.disconnect(self._perf_frame)
                 except Exception:
                     pass
-                base = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "EliteAIBridge"
+                base = eab_platform.data_dir()
                 base.mkdir(parents=True, exist_ok=True)
                 with open(base / "ui_perf.log", "a", encoding="utf-8") as f:
                     f.write(time.strftime("%Y-%m-%d %H:%M:%S") + "  first 2 minutes\n" + "\n".join(self._perf_lines) + "\n")
@@ -1272,7 +1275,7 @@ class BridgeViewModel(QObject):
         # Elite stores the selected presentation mode in DisplaySettings.xml.
         # Treat missing/unreadable config as UNKNOWN rather than falsely warning.
         try:
-            cfg = Path(os.environ.get("LOCALAPPDATA", "")) / "Frontier Developments" / "Elite Dangerous" / "Options" / "Graphics" / "DisplaySettings.xml"
+            cfg = eab_platform.display_settings_file()
             if not cfg.exists(): return "UNKNOWN"
             text = cfg.read_text(encoding="utf-8", errors="ignore")
             def val(tag):

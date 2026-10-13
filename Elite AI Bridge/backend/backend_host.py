@@ -51,6 +51,12 @@ try:
 except Exception:
     pass
 
+# Shared per-platform paths (Windows, or Linux with Elite under Proton). A key saved
+# on Linux is loaded into OPENAI_API_KEY here, before the engine reads it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+import eab_platform
+eab_platform.load_persisted_api_key()
+
 import EliteAIBridge_v0_12_95 as legacy
 
 
@@ -1881,7 +1887,7 @@ def _combat_leave(app):
 
 
 def _nav_memory_path() -> Path:
-    root = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "EliteAIBridge"
+    root = eab_platform.data_dir()
     root.mkdir(parents=True, exist_ok=True)
     return root / "qml_navigation_memories.json"
 
@@ -10008,12 +10014,24 @@ def _verify_openai_api_key(app, value: str):
 
 
 def _set_windows_user_api_key(value: str):
+    """Keep the verified key for later runs.
+
+    Windows: the user's OPENAI_API_KEY environment variable (registry). Other systems
+    have no such store, so the key goes to an owner-only file in the Bridge data folder
+    and backend_host loads it back into the environment at startup.
+    """
     value = str(value or "").strip()
     if not value:
         raise ValueError("API key cannot be blank.")
     if len(value) < 20:
         raise ValueError("API key looks too short.")
     os.environ["OPENAI_API_KEY"] = value
+    if os.name != "nt":
+        try:
+            eab_platform.persist_api_key(value)
+        except Exception as exc:
+            raise RuntimeError(f"Could not save the API key to {eab_platform.api_key_file()}: {exc}")
+        return
     if os.name == "nt":
         try:
             import winreg
@@ -10056,13 +10074,13 @@ class BridgeHost:
 
         # Persistent AI usage accounting belongs to the QML adapter, not the locked .95 engine.
         # The .95 counters reset each process; this sidecar accumulates positive deltas across runs.
-        local_appdata = Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
-        self.ai_usage_path = local_appdata / "EliteAIBridge" / "ai_usage_totals.json"
+        bridge_data = eab_platform.data_dir()
+        self.ai_usage_path = bridge_data / "ai_usage_totals.json"
         self.ai_usage_path.parent.mkdir(parents=True, exist_ok=True)
         self.ai_usage_totals = self._load_ai_usage_totals()
         self.ai_usage_last_session = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "transcription_calls": 0, "transcription_failures": 0, "transcription_seconds": 0.0}
         self.ai_usage_last_save = 0.0
-        self.setup_override_path = local_appdata / "EliteAIBridge" / "qml_setup_overrides.json"
+        self.setup_override_path = bridge_data / "qml_setup_overrides.json"
         self.setup_overrides = self._load_setup_overrides()
         # QML-side player shield transition watcher. The protected .95 engine already
         # ingests ShieldState; this adapter adds immediate cockpit voice feedback
@@ -11395,9 +11413,7 @@ class BridgeHost:
                         self.app._native_set_status(f"Commander refresh failed: {exc}")
                 elif command == "journal":
                     path = Path(getattr(legacy, "JOURNAL_DIR"))
-                    if os.name == "nt":
-                        os.startfile(str(path))
-                    else:
+                    if not eab_platform.open_folder(path):
                         self.app._native_set_status(f"Journal folder: {path}")
                 elif command == "save_data":
                     # One-click beta export: preserve the simple commander JSON but
@@ -11461,7 +11477,7 @@ class BridgeHost:
                         zf.write(diagnostic_target, arcname=diagnostic_target.name)
                         zf.writestr("bundle_metadata.json", json.dumps(metadata, indent=2))
                         zf.writestr("beta_trace_summary.json", json.dumps(beta_trace, ensure_ascii=False, indent=2, default=str))
-                        log_root = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "EliteAIBridge"
+                        log_root = eab_platform.data_dir()
                         qml_log = log_root / "qml_backend.log"
                         qml_log_prev = log_root / "qml_backend.log.1"
                         if qml_log.exists():
@@ -11491,15 +11507,8 @@ class BridgeHost:
                         self.app._ui_sfx_play("ui_confirm")
                     except Exception:
                         pass
-                    try:
-                        if os.name == "nt":
-                            subprocess.Popen(["explorer.exe", f"/select,{bundle_target}"], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                    except Exception:
-                        try:
-                            if os.name == "nt":
-                                os.startfile(str(export_dir))
-                        except Exception:
-                            pass
+                    if not eab_platform.open_folder(export_dir, select=bundle_target):
+                        eab_platform.open_folder(export_dir)
                 elif command == "diagnostic":
                     def _copy_full_diagnostic():
                         try:
@@ -11524,7 +11533,7 @@ class BridgeHost:
                     complete_text = "Orientation complete. Your controls have returned. Explore the Bridge normally from here. Press Page Help on any page when you want a guided explanation. You can replay the full cockpit orientation later from Setup. If optional AI is enabled, you can also use Push to Talk to ask the Bridge a specific question."
                     self.app._demo_transcript_append("ORIENTATION", "COMPLETE", complete_text)
                     self.app.voice_engine.say(complete_text, speed_scale=0.98)
-                    self.app._native_set_status("First cockpit orientation complete // narration log saved to %LOCALAPPDATA%\\EliteAIBridge\\demo_narration_transcript.log")
+                    self.app._native_set_status("First cockpit orientation complete // narration log saved to " + str(eab_platform.data_dir() / "demo_narration_transcript.log"))
                 elif command == "page_help_stop":
                     self.app.after(0, self.app._page_help_stop)
                 elif command == "ui_context":
